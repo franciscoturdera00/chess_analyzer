@@ -4,14 +4,14 @@ CLI tool that fetches Chess.com games, analyzes them with Stockfish, and uses Cl
 
 ## Architecture
 
-4-step pipeline: **Fetch** (Chess.com API) → **Analyze** (Stockfish) → **Classify** (Claude Batch API) → **Report** (terminal/md/json)
+4-step pipeline: **Fetch** (Chess.com API) → **Analyze** (Stockfish) → **Classify** (Claude Batch API) → **Report** (terminal + shareable markdown)
 
 Key modules:
 - `main.py` — CLI entry point and pipeline orchestration
 - `fetcher.py` — Chess.com game archive fetching with local caching
 - `analyzer.py` — Parallel Stockfish analysis (ProcessPoolExecutor)
 - `classifier.py` — Claude Batch API for mistake classification with prompt caching
-- `reporter.py` — Statistics aggregation, pattern analysis (Claude Opus), output formatting
+- `reporter.py` — Statistics aggregation, pattern analysis (Claude Opus), output formatting. Terminal output always auto-saves a non-developer-friendly markdown report to `output/report_<username>.md`
 - `config.py` — Centralized configuration (env vars + defaults)
 - `prompts/system_prompt.txt` — Chess analysis classification prompt
 
@@ -33,6 +33,8 @@ Copy `.env.example` to `.env` and fill in values.
 ```bash
 python main.py --username <chess.com-username> [--months 3] [--time-control blitz rapid] [--depth 18] [--output terminal]
 ```
+
+The default `terminal` output also auto-saves a shareable markdown report to `output/report_<username>.md` (written for a non-technical audience with values in pawns and a glossary). Use `--output md` to skip terminal display and only write the file, or `--output json` for raw data.
 
 Use `--skip-analysis` to reuse cached Stockfish results from a previous run.
 
