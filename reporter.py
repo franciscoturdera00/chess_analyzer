@@ -418,42 +418,46 @@ def _render_terminal(report_data, verbose=False):
 
 
 def _render_markdown(report_data, username, verbose=False):
-    """Render report as markdown and save to file."""
+    """Render report as a shareable markdown file aimed at a general audience."""
     lines = []
-    lines.append("# Chess Weakness Analyzer Report\n")
-
-    # Summary
     stats = report_data["summary"]
-    lines.append("## Summary Statistics\n")
-    lines.append(f"| Metric | Value |")
-    lines.append(f"|--------|-------|")
-    lines.append(f"| Total Games | {stats['total_games']} |")
-    lines.append(f"| Total Moves Analyzed | {stats['total_moves']} |")
-    lines.append(f"| Date Range | {stats['date_range']} |")
-    lines.append(f"| Avg CP Loss/Game | {stats['avg_cp_loss_per_game']}cp |")
-    lines.append(f"| Inaccuracies | {stats['inaccuracies']} |")
-    lines.append(f"| Mistakes | {stats['mistakes']} |")
-    lines.append(f"| Blunders | {stats['blunders']} |")
-    lines.append("")
+    generated = datetime.now(timezone.utc).strftime("%B %d, %Y")
 
-    # Themes
+    lines.append(f"# Chess Analysis Report for **{username}**\n")
+    lines.append(f"*Generated on {generated} — covering {stats['total_games']} games "
+                 f"({stats['date_range']})*\n")
+
+    # ── Summary ──
+    lines.append("## Overview\n")
+    lines.append(f"Across **{stats['total_games']} games** and **{stats['total_moves']} moves**, "
+                 f"the analysis found **{stats['total_mistakes']}** moments where a significantly "
+                 f"better move was available:\n")
+    lines.append(f"- **{stats['inaccuracies']}** small inaccuracies (minor missed opportunities)")
+    lines.append(f"- **{stats['mistakes']}** mistakes (meaningful advantage lost)")
+    lines.append(f"- **{stats['blunders']}** blunders (game-changing errors)")
+    lines.append(f"\nOn average, each game had roughly "
+                 f"**{stats['avg_cp_loss_per_game']} centipawns** of positional value lost "
+                 f"— think of 100 centipawns as roughly the value of one pawn.\n")
+
+    # ── Themes ──
     themes = report_data["themes"]
     if themes:
-        lines.append("## Top Missed Tactical Themes\n")
-        lines.append("| Theme | Count | Avg CP Loss | Example |")
-        lines.append("|-------|-------|-------------|---------|")
+        lines.append("## Most Common Tactical Patterns Missed\n")
+        lines.append("These are the types of ideas that were most frequently overlooked:\n")
+        lines.append("| Pattern | Times Missed | Avg Value Lost | First Seen |")
+        lines.append("|---------|:------------:|:--------------:|------------|")
         for t in themes[:10]:
             lines.append(
-                f"| {t['theme']} | {t['count']} | {t['avg_cp_loss']}cp | "
+                f"| {t['theme']} | {t['count']} | ~{t['avg_cp_loss'] / 100:.1f} pawns | "
                 f"vs {t['example_opponent']}, move {t['example_move']} |"
             )
         lines.append("")
 
-    # Phases
+    # ── Phases ──
     phases = report_data["phases"]
-    lines.append("## Weakness by Game Phase\n")
-    lines.append("| Phase | Mistakes | Mistake Rate | Top Theme |")
-    lines.append("|-------|----------|-------------|-----------|")
+    lines.append("## Where Mistakes Happen in the Game\n")
+    lines.append("| Phase | Mistakes | Error Rate | Most Common Issue |")
+    lines.append("|-------|:--------:|:----------:|-------------------|")
     for phase in ["opening", "middlegame", "endgame"]:
         if phase in phases:
             p = phases[phase]
@@ -462,59 +466,77 @@ def _render_markdown(report_data, username, verbose=False):
             )
     lines.append("")
 
-    # Time pressure
+    # ── Time pressure ──
     time_data = report_data["time_pressure"]
     if time_data:
-        lines.append("## Time Pressure Analysis\n")
-        lines.append("| Clock | Mistakes | Avg CP Loss | Top Theme |")
-        lines.append("|-------|----------|-------------|-----------|")
+        lines.append("## How Time Pressure Affects Play\n")
+        lines.append("| Time Remaining | Mistakes | Avg Value Lost | Most Common Issue |")
+        lines.append("|----------------|:--------:|:--------------:|-------------------|")
         for label in ["plenty (>3 min)", "moderate (1-3 min)", "time pressure (<1 min)"]:
             if label in time_data:
                 td = time_data[label]
                 lines.append(
-                    f"| {label} | {td['mistake_count']} | {td['avg_cp_loss']}cp | {td['top_theme']} |"
+                    f"| {label.title()} | {td['mistake_count']} | "
+                    f"~{td['avg_cp_loss'] / 100:.1f} pawns | {td['top_theme']} |"
                 )
         lines.append("")
 
-    # Openings
+    # ── Openings ──
     openings = report_data["openings"]
     if openings:
-        lines.append("## Opening Performance\n")
-        lines.append("| Opening | Games | W/L/D | Avg CP Loss | Mistakes/Game |")
-        lines.append("|---------|-------|-------|-------------|---------------|")
+        lines.append("## Performance by Opening\n")
+        lines.append("| Opening | Games | Record (W/L/D) | Avg Value Lost | Mistakes/Game |")
+        lines.append("|---------|:-----:|:--------------:|:--------------:|:-------------:|")
         for o in openings[:10]:
             lines.append(
                 f"| {o['opening'][:40]} | {o['games']} | "
                 f"{o['wins']}/{o['losses']}/{o['draws']} | "
-                f"{o['avg_cp_loss']}cp | {o['mistakes_per_game']} |"
+                f"~{o['avg_cp_loss'] / 100:.1f} pawns | {o['mistakes_per_game']} |"
             )
         lines.append("")
 
-    # Verbose
+    # ── Detailed mistake log ──
     if verbose and report_data.get("all_mistakes"):
         lines.append("## Detailed Mistake Log\n")
         for i, m in enumerate(report_data["all_mistakes"], 1):
             cls = m.get("classification", {})
+            severity = m.get("severity", "")
+            severity_label = {"blunder": "BLUNDER", "mistake": "Mistake", "inaccuracy": "Inaccuracy"}.get(
+                severity, severity
+            )
             lines.append(
                 f"**#{i}** Move {m.get('move_number', '?')}: "
-                f"**{m.get('player_move', '?')}** "
-                f"(best: {m.get('best_move', '?')}) "
-                f"- {m.get('eval_swing', 0)}cp loss [{m.get('severity', '')}]"
+                f"played **{m.get('player_move', '?')}** "
+                f"(best was {m.get('best_move', '?')}) "
+                f"— lost ~{m.get('eval_swing', 0) / 100:.1f} pawns [{severity_label}]"
             )
             if cls.get("primary_theme"):
-                lines.append(f"- Theme: {cls['primary_theme'].replace('_', ' ').title()}")
+                lines.append(f"- Pattern: {cls['primary_theme'].replace('_', ' ').title()}")
             if cls.get("explanation"):
                 lines.append(f"- {cls['explanation']}")
             if cls.get("lesson"):
-                lines.append(f"- *Lesson: {cls['lesson']}*")
-            lines.append(f"- vs {m.get('opponent', '?')} | {m.get('opening_name', '?')}")
+                lines.append(f"- *Takeaway: {cls['lesson']}*")
+            lines.append(f"- Opponent: {m.get('opponent', '?')} | Opening: {m.get('opening_name', '?')}")
             lines.append("")
 
-    # AI Analysis
+    # ── AI Analysis ──
     if report_data.get("ai_analysis"):
-        lines.append("## AI Pattern Analysis\n")
+        lines.append("## AI Insights & Training Recommendations\n")
         lines.append(report_data["ai_analysis"])
         lines.append("")
+
+    # ── Glossary ──
+    lines.append("---\n")
+    lines.append("### How to read this report\n")
+    lines.append("- **Centipawn (cp):** A unit for measuring advantage in chess. "
+                 "100 cp = roughly one pawn's worth of advantage.")
+    lines.append("- **Inaccuracy:** A move that lets a small advantage slip (100-200 cp lost).")
+    lines.append("- **Mistake:** A move that loses a meaningful amount of advantage (200-300 cp lost).")
+    lines.append("- **Blunder:** A move that loses a major advantage or the game (300+ cp lost).")
+    lines.append("- **Opening / Middlegame / Endgame:** The three phases of a chess game. "
+                 "The opening covers the first ~10 moves, the endgame begins when most pieces "
+                 "are traded off, and the middlegame is everything in between.")
+    lines.append("")
 
     content = "\n".join(lines)
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
@@ -568,7 +590,10 @@ def generate_report(analysis_results, username, output_format="terminal", verbos
     # Render
     if output_format == "terminal":
         _render_terminal(report_data, verbose=verbose)
-        return None
+        # Always save a shareable markdown report alongside terminal output
+        path = _render_markdown(report_data, username, verbose=verbose)
+        console.print(f"\n[green]Shareable report saved to {path}[/green]")
+        return path
     elif output_format == "md":
         path = _render_markdown(report_data, username, verbose=verbose)
         console.print(f"[green]Report saved to {path}[/green]")
